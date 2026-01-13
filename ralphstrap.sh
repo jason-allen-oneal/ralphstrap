@@ -1,84 +1,157 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -uo pipefail
 
-# ralphstrap.sh - A bootstrap script for ralph-style agentic coding projects.
-# This script takes an app idea from the user and generates an initial project
-# structure and prompts for the Gemini CLI, following the ralph-playbook principles.
-
-RALPH_PLAYBOOK_URL="https://github.com/ClaytonFarr/ralph-playbook"
-
-echo "Welcome to Ralphstrap! Let's bootstrap your new agentic coding project."
-echo "--------------------------------------------------------------------"
-
-# Prompt for the app idea
-echo "Please provide a detailed description of your app idea. Be as specific as possible:"
-echo "(Press Ctrl+D when you are finished typing)"
-APP_IDEA=$(cat)
-
-if [ -z "$APP_IDEA" ]; then
-    echo "Error: App idea cannot be empty. Please try again."
-    exit 1
+# Enforce bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "ERROR: This script must be run with bash." >&2
+  exit 1
 fi
 
-# Summarized ralph-style principles for context
-RALPH_STYLE_SUMMARY="
+# ---------------- CONFIG ----------------
+RALPH_PLAYBOOK_URL="https://github.com/ClaytonFarr/ralph-playbook"
+LLM_BIN="${LLM_BIN:-gemini}"
+GEMINI_MODEL="gemini-2.5-flash"
+EDITOR_BIN="${EDITOR:-nano}"
+# ----------------------------------------
+
+echo "Ralphstrap: bootstrapping agentic project"
+echo "----------------------------------------"
+echo "An editor will open for your app idea."
+echo "Write freely, save, and close the editor."
+echo "----------------------------------------"
+
+# ----------- INPUT VIA EDITOR -----------
+TMP_IDEA_FILE="$(mktemp /tmp/ralphstrap_idea.XXXXXX.md)"
+
+cat >"$TMP_IDEA_FILE" <<'EOF'
+# Write your app idea below.
+# Markdown, JSON, and blank lines are allowed.
+
+EOF
+
+"$EDITOR_BIN" "$TMP_IDEA_FILE"
+
+if [[ ! -s "$TMP_IDEA_FILE" ]]; then
+  echo "ERROR: App idea file is empty." >&2
+  rm -f "$TMP_IDEA_FILE"
+  exit 1
+fi
+
+APP_IDEA="$(cat "$TMP_IDEA_FILE")"
+rm -f "$TMP_IDEA_FILE"
+
+# Trim leading/trailing empty lines only
+APP_IDEA="$(printf "%s" "$APP_IDEA" \
+  | sed -e '1{/^[[:space:]]*$/d;}' -e '${/^[[:space:]]*$/d;}')"
+
+if [[ -z "$APP_IDEA" ]]; then
+  echo "ERROR: App idea cannot be empty." >&2
+  exit 1
+fi
+# ----------------------------------------
+
+read -r -d '' RALPH_STYLE_SUMMARY <<EOF
 The 'ralph-style' of agentic coding, as described in the ralph-playbook ($RALPH_PLAYBOOK_URL), emphasizes:
 
-**Workflow Phases:**
-1.  **Define Requirements (LLM conversation):** Discuss project ideas, identify Jobs to Be Done (JTBD), break into topics, use subagents to load context, and write specifications.
-2.  **Run Ralph Loop (two modes):**
-    *   **PLANNING mode:** Generates or updates \`IMPLEMENTATION_PLAN.md\`.
-    *   **BUILDING mode:** Implements from the plan, commits changes, and updates the plan.
+- Iterative planning and building loops
+- Disk-persisted plans (IMPLEMENTATION_PLAN.md)
+- Markdown-first coordination
+- Deterministic backpressure via plans, tests, and structure
+- Bash-driven outer loop with LLM inner loop
+EOF
 
-**Key Principles of Ralph:**
-*   **Context Is Everything:** Efficient use of context windows, main agent as scheduler, subagents as memory extensions, simplicity, brevity, Markdown over JSON.
-*   **Steering Ralph: Patterns + Backpressure:** Use signals and gates (deterministic setup, existing code patterns, tests, typechecks, linters) to steer output.
-*   **Let Ralph Ralph:** Trust self-identification, self-correction, and self-improvement through iteration. Run in isolated environments.
-*   **Move Outside the Loop:** User engineers the setup and environment, observes, and course-corrects.
+read -r -d '' GEMINI_PROMPT <<EOF
+You are an expert software engineer following ralph-style agentic coding.
 
-**Loop Mechanics:**
-*   Outer loop: Controlled by a simple bash script (e.g., \`loop.sh\`) continuously feeding a prompt file to an LLM.
-*   Shared state: \`IMPLEMENTATION_PLAN.md\` persists on disk.
-*   Inner loop: Task execution controlled by scope discipline, backpressure, and natural completion.
-
-**Core Files/Directories:**
-\`loop.sh\`, \`PROMPT_build.md\`, \`PROMPT_plan.md\`, \`AGENTS.md\`, \`IMPLEMENTATION_PLAN.md\`, \`specs/\`, \`src/\`.
-"
-
-# Construct the prompt for Gemini CLI
-GEMINI_PROMPT="
-You are an expert software engineer specializing in agentic coding following the 'ralph-style' principles.
-The user wants to create a new application with the following idea:
-
---- APP IDEA ---
+APP IDEA:
 $APP_IDEA
---- END APP IDEA ---
 
-Here is a summary of the 'ralph-style' agentic coding principles from the ralph-playbook ($RALPH_PLAYBOOK_URL):
-
---- RALPH STYLE SUMMARY ---
+RALPH PRINCIPLES:
 $RALPH_STYLE_SUMMARY
---- END RALPH STYLE SUMMARY ---
 
-Your task is to act as the initial agent for this project. Based on the app idea and the 'ralph-style' principles, generate the following:
+OUTPUT REQUIREMENTS (STRICT):
+- Emit ONLY file blocks
+- Use this exact format:
 
-1.  **A high-level development plan:** Outline the major steps to build this application, broken down into ralph-style iterative tasks. This plan should be suitable for inclusion in an \`IMPLEMENTATION_PLAN.md\` file, starting with the "Define Requirements" phase.
-2.  **Initial project files and directories:**
-    *   \`README.md\`: A basic README for the new project, explaining its purpose and how to get started with the Ralph loop.
-    *   \`project_idea.md\`: A detailed markdown file containing the user's app idea.
-    *   \`loop.sh\`: A bash script to run the Ralph loop. It should be a basic loop that continuously feeds a prompt file to an LLM (e.g., \`gemini\`) and updates \`IMPLEMENTATION_PLAN.md\`. Include placeholders for LLM interaction.
-    *   \`PROMPT_build.md\`: A markdown file containing the prompt for the 'BUILDING' mode of the Ralph loop.
-    *   \`PROMPT_plan.md\`: A markdown file containing the prompt for the 'PLANNING' mode of the Ralph loop.
-    *   \`AGENTS.md\`: A markdown file describing any sub-agents or their roles, if applicable to the initial setup.
-    *   \`IMPLEMENTATION_PLAN.md\`: An initial implementation plan based on the high-level development plan you generated.
-    *   Create the following empty directories: \`specs/\` and \`src/\`.
+=== FILE: relative/path ===
+<file content>
+=== END FILE ===
 
-For the bash scripts, ensure they are executable (\`chmod +x\`) and include comments explaining their purpose.
-Present the output as a series of file blocks, clearly indicating the filename and content.
-"
+FILES TO GENERATE:
+- README.md
+- project_idea.md
+- loop.sh
+- PROMPT_build.md
+- PROMPT_plan.md
+- AGENTS.md
+- IMPLEMENTATION_PLAN.md
+- Create empty dirs: specs/, src/
 
-echo "--------------------------------------------------------------------"
-echo "Generated Gemini CLI Command (copy and paste this into your Gemini CLI):"
-echo "--------------------------------------------------------------------"
-echo "gemini \"$GEMINI_PROMPT\""
-echo "--------------------------------------------------------------------"
-echo "Please execute the command above in your Gemini CLI to generate the initial project files."
+Do not explain anything. Only emit file blocks.
+EOF
+
+echo "Invoking Gemini with model: $GEMINI_MODEL"
+
+if ! command -v "$LLM_BIN" >/dev/null 2>&1; then
+  echo "ERROR: gemini CLI not found in PATH." >&2
+  exit 1
+fi
+
+tmp_out="$(mktemp)"
+tmp_err="$(mktemp)"
+
+"$LLM_BIN" \
+  "$GEMINI_PROMPT" \
+  -m "$GEMINI_MODEL" \
+  >"$tmp_out" 2>"$tmp_err"
+
+rc=$?
+
+LLM_OUTPUT="$(cat "$tmp_out")"
+LLM_ERR="$(cat "$tmp_err")"
+rm -f "$tmp_out" "$tmp_err"
+
+if [[ $rc -ne 0 ]]; then
+  echo "ERROR: Gemini failed (exit code $rc)" >&2
+  if [[ -n "$LLM_ERR" ]]; then
+    echo "----- Gemini stderr -----" >&2
+    printf "%s\n" "$LLM_ERR" >&2
+  fi
+  exit 1
+fi
+
+if [[ -z "$LLM_OUTPUT" ]]; then
+  echo "ERROR: Gemini returned no output." >&2
+  exit 1
+fi
+
+echo "Materializing files..."
+echo "----------------------------------------"
+
+current_file=""
+buffer=""
+
+while IFS= read -r line; do
+  if [[ "$line" =~ ^===\ FILE:\ (.+)\ ===$ ]]; then
+    current_file="${BASH_REMATCH[1]}"
+    buffer=""
+    continue
+  fi
+
+  if [[ "$line" == "=== END FILE ===" ]]; then
+    mkdir -p "$(dirname "$current_file")"
+    printf "%s" "$buffer" >"$current_file"
+    echo "Wrote: $current_file"
+    current_file=""
+    buffer=""
+    continue
+  fi
+
+  [[ -n "$current_file" ]] && buffer+="${line}"$'\n'
+done <<< "$LLM_OUTPUT"
+
+mkdir -p specs src
+
+echo "----------------------------------------"
+echo "Bootstrap complete."
+echo "Next step: review IMPLEMENTATION_PLAN.md and run loop.sh"
