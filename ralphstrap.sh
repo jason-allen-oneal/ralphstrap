@@ -78,7 +78,6 @@ OUTPUT REQUIREMENTS (STRICT):
 === END FILE ===
 
 FILES TO GENERATE:
-- README.md
 - project_idea.md
 - loop.sh
 - PROMPT_build.md

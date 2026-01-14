@@ -17,9 +17,14 @@ Bootstrap a ralph-style agentic project by feeding an app idea to the Gemini CLI
 4. Describe your app idea in the editor that opens, save, and close it.
 5. The script calls Gemini with the prompt and writes the returned files into the repo.
 
+## Install for Anywhere Use
+Install the script onto your PATH so you can run `ralphstrap` from any directory:
+- Default (no sudo): `./install.sh` installs to `~/.local/bin/ralphstrap`.
+- Alternate target: `TARGET_DIR=/usr/local/bin sudo ./install.sh` installs system-wide.
+- Ensure the chosen target directory is on your `PATH`, then run `ralphstrap` from any directory.
+
 ## What Gets Generated
 The model output is expected to create these files/directories:
-- `README.md` (model-generated project readme)
 - `project_idea.md`
 - `loop.sh`
 - `PROMPT_build.md`
