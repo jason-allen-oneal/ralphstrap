@@ -72,16 +72,19 @@ if [ "$1" = "plan" ]; then
     MODE="plan"
     PROMPT_FILE="PROMPT_plan.md"
     MAX_ITERATIONS=${2:-0}
+    CHECK_GATE=false
 elif [[ "$1" =~ ^[0-9]+$ ]]; then
     # Build mode with max iterations
     MODE="build"
     PROMPT_FILE="PROMPT_build.md"
     MAX_ITERATIONS=$1
+    CHECK_GATE=true
 else
     # Build mode, unlimited (no arguments or invalid input)
     MODE="build"
     PROMPT_FILE="PROMPT_build.md"
     MAX_ITERATIONS=0
+    CHECK_GATE=true
 fi
 
 ITERATION=0
@@ -106,7 +109,7 @@ while true; do
         break
     fi
 
-    gemini "$PROMPT_FILE" -y -m gemini-3-flash -o json
+    gemini "$PROMPT_FILE" -y -m gemini-2.5-pro -o json
 
     # Push changes after each iteration
     git push origin "$CURRENT_BRANCH" || {
@@ -183,7 +186,7 @@ OUTPUT REQUIREMENTS (STRICT):
 FILES TO GENERATE:
 - project_idea.md
 - AGENTS.md (explaining how to run the app, install dependencies, run tests, etc. Per the ralph-playbook.)
-- gate.sh (will contain tests to be run from loop.sh. update the existing loop.sh to be able to run tests systematically.)
+- gate.sh (will contain tests to be run from loop.sh. update the existing loop.sh to be able to run tests systematically, unless in plan mode, while still conforming to ralph-style.)
 
 Do not explain anything. Only emit file blocks.
 EOF
@@ -249,5 +252,7 @@ while IFS= read -r line; do
 done <<< "$LLM_OUTPUT"
 
 echo "----------------------------------------"
+chmod +x loop.sh gate.sh
+git init
 echo "Bootstrap complete."
 echo "Next step: review IMPLEMENTATION_PLAN.md and run loop.sh"
